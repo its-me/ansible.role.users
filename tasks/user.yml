@@ -1,0 +1,41 @@
+---
+# users user
+
+
+- name: Set user
+  ansible.builtin.set_fact:
+    user:
+      comment: '{{ item.value.realname | default(item.key + " user.") }}'
+      shell: '{{ item.value.shell | default(users_shell) }}'
+      home: '{{ item.value.base_dir + "/" + item.key if item.value.base_dir is defined else users_base_dir + "/" + item.key }}'
+      system: '{{ "yes" if item.value.system is defined and item.value.system else "no" }}'
+      password: '{{ item.value.password | password_hash("sha512") if item.value.password is defined else "!" }}'
+      update_password: '{{ item.value.update_password | default(users_update_password) }}'
+      groups: '{{ item.value.groups | default("") }}'
+      group: '{{ item.value.group | default(item.key) if _user | length == 0 else _user[1] }}'
+
+- name: Add group with or without GID
+  ansible.builtin.import_tasks: group_with{% if item.value.gid is not defined and item.value.uid is not defined %}out{% endif %}_gid.yml
+
+- name: Add user with or without UID
+  ansible.builtin.import_tasks: user_with{% if item.value.uid is not defined %}out{% endif %}_uid.yml
+
+- name: Add ssh keys to {{ item.key }}
+  ansible.posix.authorized_key:
+    user: '{{ item.key }}'
+    key: "{{ item.value.sshkeys | default([]) | join('\n') }}"
+    exclusive: true
+    state: present
+  when: item.value.sshkeys is defined
+
+- name: Add sudo without password to users in users__admins
+  ansible.builtin.copy:
+    content: '{{ item.key }} ALL=(ALL) NOPASSWD:ALL'
+    dest: '{{ users_sudoers_dir }}/95-{{ item.key }}'
+    owner: root
+    group: root
+    mode: '0440'
+    force: true
+    validate: 'visudo -cf %s'
+  when: item.key in users_group__admins
+  become: true

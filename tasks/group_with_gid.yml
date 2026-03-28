@@ -1,0 +1,10 @@
+---
+# users group_with_gid
+
+
+- name: Add group with gid
+  ansible.builtin.group:
+    name: '{{ item.key }}'
+    gid: '{{ item.value.gid | default(item.value.uid) if _group | length == 0 else _group[1] }}'
+    system: '{{ "yes" if item.value.system is defined and item.value.system else "no" }}'
+    state: present

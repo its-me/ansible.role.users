@@ -1,0 +1,7 @@
+---
+# users dependencies
+
+
+dependencies:
+  - role: apt
+    apt_packages: '{{ users_packages }}'

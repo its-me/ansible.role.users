@@ -1,0 +1,43 @@
+---
+# users default variables
+
+
+users_packages: sudo
+
+users_shell: /bin/bash
+users_base_dir: /home
+users_update_password: on_create
+
+users_sudo: sudo
+users_sudoers_file: /etc/sudoers
+users_sudoers_dir: /etc/sudoers.d
+users_sudoers_validate: visudo -cf %s
+
+users_all: []
+users_env: []
+users_host: []
+
+_users: '{% set d = {} %}{% for u in users | default([]) %}{% do d.update({u.user: u}) %}{% endfor %}{{ d }}'
+_users_all: '{% set d = {} %}{% for u in users_all %}{% do d.update({u.user: u}) %}{% endfor %}{{ d }}'
+_users_env: '{% set d = {} %}{% for u in users_env %}{% do d.update({u.user: u}) %}{% endfor %}{{ d }}'
+_users_host: '{% set d = {} %}{% for u in users_host %}{% do d.update({u.user: u}) %}{% endfor %}{{ d }}'
+_users_envs: '{{ _users_all | combine(_users_env, recursive=True) | combine(_users_host, recursive=True) }}'
+
+users_add: '{{ _users if users is defined else _users_envs }}'
+
+users_groups_all: []
+users_groups_env: []
+users_groups_host: []
+
+_users_groups: '{% set d = {} %}{% for g in users_groups | default([]) %}{% do d.update({g.group: g}) %}{% endfor %}{{ d }}'
+_users_groups_all: '{% set d = {} %}{% for g in users_groups_all %}{% do d.update({g.group: g}) %}{% endfor %}{{ d }}'
+_users_groups_env: '{% set d = {} %}{% for g in users_groups_env %}{% do d.update({g.group: g}) %}{% endfor %}{{ d }}'
+_users_groups_host: '{% set d = {} %}{% for g in users_groups_host %}{% do d.update({g.group: g}) %}{% endfor %}{{ d }}'
+_users_groups_envs: '{{ _users_groups_all | combine(_users_groups_env, recursive=True) | combine(_users_groups_host, recursive=True) }}'
+
+users_groups_add: '{{ _users_groups if users_groups is defined else _users_groups_envs }}'
+
+users__removed: []
+users_groups__removed: []
+
+users__admins: []

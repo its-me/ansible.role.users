@@ -1,0 +1,9 @@
+---
+# users group_without_gid
+
+
+- name: Add group without gid
+  ansible.builtin.group:
+    name: '{{ item.key }}'
+    system: '{{ "yes" if item.value.system is defined and item.value.system else "no" }}'
+    state: present

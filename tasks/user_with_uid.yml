@@ -1,0 +1,18 @@
+---
+# users user_with_uid
+
+
+- name: Add user with uid
+  ansible.builtin.user:
+    name: '{{ item.key }}'
+    comment: '{{ user.comment }}'
+    shell: '{{ user.shell }}'
+    home: '{{  user.home if _user | length == 0 else _user[4] }}'
+    system: '{{ user.system }}'
+    password: '{{ user.password }}'
+    update_password: '{{ user.update_password }}'
+    groups: '{{ user.groups }}'
+    group: '{{ user.group }}'
+    uid: '{{ item.value.uid if _user | length == 0 else _user[1] }}'
+    append: true
+    state: present

@@ -1,0 +1,104 @@
+---
+# users main
+
+
+- name: Sudo config
+  become: true
+  tags: ['users', 'sudo']
+  block:
+    - name: Get sudo version
+      ansible.builtin.command: '{{ users_sudo }} --version'
+      register: _sudo_output
+      changed_when: false
+
+    - name: Parse sudo version
+      ansible.builtin.set_fact:
+        _sudo_version: '{{ _sudo_output["stdout_lines"][0] | regex_search("Sudo version (\d+).(\d+).(\d+)", "\1", "\2", "\3") }}'
+
+    - name: Check if sudo version 1.9.1 or newer
+      ansible.builtin.set_fact:
+        _sudo_new_version: '{{ _sudo_version[0] | int >= 1 and _sudo_version[1] | int >= 9 and _sudo_version[2] | int >= 1 }}'
+
+    - name: Check include directory in sudoers
+      ansible.builtin.lineinfile:
+        dest: '{{ users_sudoers_file }}'
+        regexp: '{% if _sudo_new_version %}^(#|@)includedir\s+/etc/sudoers.d${% else %}^#includedir\s+/etc/sudoers.d${% endif %}'
+        line: '{% if _sudo_new_version %}@includedir {{ users_sudoers_dir }}{% else %}#includedir {{ users_sudoers_dir }}{% endif %}'
+        state: present
+        validate: '{{ users_sudoers_validate }}'
+
+
+- name: Add users groups ssh-keys
+  become: true
+  tags: ['users', 'add']
+  block:
+    - name: Get exist users list
+      ansible.builtin.getent:
+        database: passwd
+
+    - name: Get exist groups list
+      ansible.builtin.getent:
+        database: group
+
+  #  - debug:
+  #      msg: 'groups: [{{ getent_group.keys() | intersect(users_groups_add.keys()) | join(", ")  }}] already exists.'
+  #    when: getent_group.keys() | intersect(users_groups_add.keys()) | length > 0
+
+  #  - debug:
+  #      msg: 'users: [{{ getent_passwd.keys() | intersect(users_add.keys()) | join(", ")  }}] already exists.'
+  #    when: getent_passwd.keys() | intersect(users_add.keys()) | length > 0
+
+    - name: Add groups defined in users_groups variable
+      ansible.builtin.include_tasks: group_with{% if item.value.gid is not defined %}out{% endif %}_gid.yml
+      vars:
+        _group: '{{ getent_group[item.key] if getent_group[item.key] is defined else [] }}'
+      with_dict: '{{ users_groups_add }}'
+      when: item.key not in users_groups__removed
+
+    - name: Add users defined in users variable
+      ansible.builtin.include_tasks: user.yml
+      vars:
+        _user: '{{ getent_passwd[item.key] if getent_passwd[item.key] is defined else [] }}'
+        _group: '{{ getent_group[item.key] if getent_group[item.key] is defined else [] }}'
+      with_dict: '{{ users_add }}'
+      when: item.key not in users__removed
+
+
+- name: Del users groups ssh-keys
+  become: true
+  tags: ['users', 'del']
+  block:
+    - name: Del groups defined in users_groups__removed
+      ansible.builtin.group:
+        name: '{{ item }}'
+        state: absent
+      with_items: '{{ users_groups__removed }}'
+
+    - name: Del users defined in users__removed
+      ansible.builtin.user:
+        name: '{{ item }}'
+        state: absent
+        remove: true
+        force: false
+      with_items: '{{ users__removed }}'
+
+    - name: Del personal sudoers file from {{ users_sudoers_dir }}
+      ansible.builtin.file:
+        path: '{{ users_sudoers_dir }}/95-{{ item }}'
+        state: absent
+      with_items: '{{ users__removed }}'
+
+    - name: Warn if removed users still in sudoers
+      when: users__removed | length > 0
+      block:
+        - name: Search removed users in sudoers files
+          ansible.builtin.shell: 'grep -rP "^({{ users__removed | join("|") | quote }})\s" {{ users_sudoers_dir | quote }}/* {{ users_sudoers_file | quote }}'
+          failed_when: _users_sudoers.rc|int == 0
+          register: _users_sudoers
+          changed_when: false
+
+        - name: Failed if remove users found in sudoers file
+          ansible.builtin.fail:
+            msg: 'Removed users found in -> {{ item }}'
+          with_items: '{{ _users_sudoers.stdout_lines }}'
+          when: _users_sudoers.stdout | length > 0
